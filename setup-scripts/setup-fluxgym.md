@@ -6,6 +6,8 @@ git clone -b sd3 https://github.com/kohya-ss/sd-scripts
 python -m venv env
 env\Scripts\activate
 
+python -m pip install --upgrade pip
+
 cd sd-scripts
 pip install -r requirements.txt
 
