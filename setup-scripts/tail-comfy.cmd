@@ -1,0 +1,1 @@
+tailscale serve --http 8010 8188

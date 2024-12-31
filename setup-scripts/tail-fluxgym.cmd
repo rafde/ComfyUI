@@ -1,0 +1,1 @@
+tailscale serve --http 8011 7860
