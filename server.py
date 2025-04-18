@@ -48,7 +48,7 @@ async def send_socket_catch_exception(function, message):
 @web.middleware
 async def cache_control(request: web.Request, handler):
     response: web.Response = await handler(request)
-    if request.path.endswith('.js') or request.path.endswith('.css'):
+    if request.path.endswith('.js') or request.path.endswith('.css') or request.path.endswith('index.json'):
         response.headers.setdefault('Cache-Control', 'no-cache')
     return response
 
@@ -57,8 +57,6 @@ async def cache_control(request: web.Request, handler):
 async def compress_body(request: web.Request, handler):
     accept_encoding = request.headers.get("Accept-Encoding", "")
     response: web.Response = await handler(request)
-    if args.disable_compres_response_body:
-        return response
     if not isinstance(response, web.Response):
         return response
     if response.content_type not in ["application/json", "text/plain"]:
@@ -152,7 +150,8 @@ class PromptServer():
         PromptServer.instance = self
 
         mimetypes.init()
-        mimetypes.types_map['.js'] = 'application/javascript; charset=utf-8'
+        mimetypes.add_type('application/javascript; charset=utf-8', '.js')
+        mimetypes.add_type('image/webp', '.webp')
 
         self.user_manager = UserManager()
         self.model_file_manager = ModelFileManager()
@@ -165,7 +164,10 @@ class PromptServer():
         self.client_session:Optional[aiohttp.ClientSession] = None
         self.number = 0
 
-        middlewares = [cache_control, compress_body]
+        middlewares = [cache_control]
+        if args.enable_compress_response_body:
+            middlewares.append(compress_body)
+
         if args.enable_cors_header:
             middlewares.append(create_cors_middleware(args.enable_cors_header))
         else:
@@ -655,7 +657,13 @@ class PromptServer():
                     logging.warning("invalid prompt: {}".format(valid[1]))
                     return web.json_response({"error": valid[1], "node_errors": valid[3]}, status=400)
             else:
-                return web.json_response({"error": "no prompt", "node_errors": []}, status=400)
+                error = {
+                    "type": "no_prompt",
+                    "message": "No prompt provided",
+                    "details": "No prompt provided",
+                    "extra_info": {}
+                }
+                return web.json_response({"error": error, "node_errors": {}}, status=400)
 
         @routes.post("/queue")
         async def post_queue(request):
@@ -727,6 +735,12 @@ class PromptServer():
         # Add routes from web extensions.
         for name, dir in nodes.EXTENSION_WEB_DIRS.items():
             self.app.add_routes([web.static('/extensions/' + name, dir)])
+
+        workflow_templates_path = FrontendManager.templates_path()
+        if workflow_templates_path:
+            self.app.add_routes([
+                web.static('/templates', workflow_templates_path)
+            ])
 
         self.app.add_routes([
             web.static('/', self.web_root),
